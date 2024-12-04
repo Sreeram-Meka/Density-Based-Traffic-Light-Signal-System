@@ -1,0 +1,140 @@
+#include <Arduino.h>
+
+// Define constants for IR sensor pins and LED pins
+const int irSensors[] = {A0, A1, A2, A3, A4, A5}; // Analog pins for IR sensors
+const int redLEDs[] = {2, 4, 6, 8}; // Pins for red LEDs
+const int greenLEDs[] = {3, 5, 7, 9}; // Pins for green LEDs
+
+// Define constants for sensor threshold and maximum green light duration
+const int sensorThreshold = 500; // Adjust based on IR sensor output
+const int maxTime = 25; // Maximum green light duration in seconds
+const int minGreenTime = 5; // Minimum green light duration for each lane in case of no traffic
+
+// Initialize vehicle counts for each lane
+int vehicleCounts[4] = {0, 0, 0, 0}; // Vehicle counts for each lane
+
+// Initialize variables to control the timing of the green light
+unsigned long greenLightStartTime = 0;
+int greenLightDuration = 0;
+bool greenLightActive = false;
+int currentLane = 0;
+int lanesWithTraffic[4];
+int laneCount = 0;
+
+void setup() {
+  // Initialize Serial communication
+  Serial.begin(9600);
+
+  // Initialize IR sensor pins as inputs
+  for (int i = 0; i < 6; i++) {
+    pinMode(irSensors[i], INPUT);
+  }
+
+  // Initialize LED pins as outputs
+  for (int i = 0; i < 4; i++) {
+    pinMode(redLEDs[i], OUTPUT);
+    pinMode(greenLEDs[i], OUTPUT);
+  }
+
+  // Set all red LEDs to HIGH initially
+  for (int i = 0; i < 4; i++) {
+    digitalWrite(redLEDs[i], HIGH);
+    digitalWrite(greenLEDs[i], LOW);
+  }
+}
+
+void loop() {
+  // Reset vehicle counts
+  for (int i = 0; i < 4; i++) {
+    vehicleCounts[i] = 0;
+  }
+
+  // Read IR sensor values and count vehicles
+  for (int i = 0; i < 6; i++) {
+    int sensorValue = analogRead(irSensors[i]);
+    if (sensorValue < sensorThreshold) {
+      if (i < 2) { // Lanes 1 and 2 have low traffic sensors
+        vehicleCounts[0]++;
+      } else if (i < 4) { // Lanes 3 and 4 have high traffic sensors
+        vehicleCounts[1]++;
+      } else { // Lanes 5 and 6 have low traffic sensors
+        vehicleCounts[2]++;
+      }
+    }
+  }
+
+  // Determine the lanes with traffic
+  laneCount = 0;
+  for (int i = 0; i < 4; i++) {
+    if (vehicleCounts[i] > 0) {
+      lanesWithTraffic[laneCount++] = i;
+    }
+  }
+
+  // Determine green light duration based on traffic
+  if (laneCount == 0) {
+    // No traffic detected, cycle through each lane for minGreenTime
+    greenLightDuration = minGreenTime;
+    // Activate each lane for minGreenTime in a round-robin fashion
+    for (int i = 0; i < 4; i++) {
+      // Turn on the green light for the current lane
+      digitalWrite(greenLEDs[i], HIGH);
+      digitalWrite(redLEDs[i], LOW);
+      
+      // Set the duration for the current lane
+      greenLightStartTime = millis();
+      while (millis() - greenLightStartTime < minGreenTime * 1000) {
+        // Just wait
+      }
+      
+      // Turn off the green light for the current lane
+      digitalWrite(greenLEDs[i], LOW);
+      digitalWrite(redLEDs[i], HIGH);
+    }
+  } else {
+    // Calculate total traffic and duration per lane
+    int totalVehicles = 0;
+    for (int i = 0; i < laneCount; i++) {
+      totalVehicles += vehicleCounts[lanesWithTraffic[i]];
+    }
+
+    // Determine the duration for each lane based on its vehicle count
+    for (int i = 0; i < laneCount; i++) {
+      int lane = lanesWithTraffic[i];
+      int laneDuration = maxTime * (vehicleCounts[lane] / (float)totalVehicles);
+      
+      // Apply the duration
+      digitalWrite(greenLEDs[lane], HIGH);
+      digitalWrite(redLEDs[lane], LOW);
+      
+      // Set the duration for the lane
+      greenLightDuration = laneDuration;
+      
+      // Wait until the duration for the current lane expires
+      greenLightStartTime = millis();
+      while (millis() - greenLightStartTime < greenLightDuration * 1000) {
+        // Just wait
+      }
+      
+      // Turn off the green light for the current lane
+      digitalWrite(greenLEDs[lane], LOW);
+      digitalWrite(redLEDs[lane], HIGH);
+    }
+  }
+
+  // Print data to the Serial Monitor
+  Serial.print("Lane 1 Count: ");
+  Serial.println(vehicleCounts[0]);
+  Serial.print("Lane 2 Count: ");
+  Serial.println(vehicleCounts[1]);
+  Serial.print("Lane 3 Count: ");
+  Serial.println(vehicleCounts[2]);
+  Serial.print("Lane 4 Count: ");
+  Serial.println(vehicleCounts[3]);
+  Serial.print("Green Light Duration: ");
+  Serial.println(greenLightDuration);
+  Serial.println();
+
+  // Add a delay to avoid flooding the Serial Monitor
+  delay(5000);
+}
