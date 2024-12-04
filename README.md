@@ -27,4 +27,3 @@
    - Addressed issues related to sensor calibration and environmental noise, ensuring accurate vehicle detection.
    - Improved system resilience by incorporating fail-safes and redundancy to handle sensor failures and maintain traffic control.
 
-- nges faced. It not only demonstrates your techn
